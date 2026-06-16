@@ -1,6 +1,6 @@
 # Creator Cards API
 
-A small REST microservice for publishing shareable creator profile cards — think
+A small REST microservice for publishing shareable creator profile cards - think
 "link-in-bio" cards with an attached rate card. Creators can publish a card, share it
 by slug, gate it behind an access code, and delete it.
 
@@ -14,7 +14,7 @@ Built on Node.js + Express with MongoDB for persistence.
 | `GET` | `/creator-cards/:slug` | Publicly retrieve a card by slug (respects draft status and private access) |
 | `DELETE` | `/creator-cards/:slug` | Delete a card by slug (soft delete) |
 
-All endpoints live at the root of the base URL — there is no versioning prefix and no
+All endpoints live at the root of the base URL - there is no versioning prefix and no
 authentication.
 
 ## The Creator Card
@@ -22,11 +22,11 @@ authentication.
 | Field | Type | Notes |
 | --- | --- | --- |
 | `id` | string (ULID) | Stored as `_id`, always serialized as `id` |
-| `title` | string | 3–100 chars, required |
+| `title` | string | 3-100 chars, required |
 | `description` | string | max 500 chars |
-| `slug` | string | 5–50 chars, unique, `[A-Za-z0-9_-]`; auto-generated from the title if omitted |
+| `slug` | string | 5-50 chars, unique, `[A-Za-z0-9_-]`; auto-generated from the title if omitted |
 | `creator_reference` | string | exactly 20 chars, required |
-| `links[]` | object[] | `{ title (1–100), url (max 200, http/https) }` |
+| `links[]` | object[] | `{ title (1-100), url (max 200, http/https) }` |
 | `service_rates` | object | `{ currency: NGN\|USD\|GBP\|GHS, rates[]: { name, description, amount } }` |
 | `status` | string | `draft` \| `published`, required |
 | `access_type` | string | `public` \| `private`, defaults to `public` |
@@ -85,7 +85,7 @@ node bootstrap.js
 
 ## Testing
 
-Automated tests run against an in-memory mock model — no database required:
+Automated tests run against an in-memory mock model - no database required:
 
 ```bash
 npm test

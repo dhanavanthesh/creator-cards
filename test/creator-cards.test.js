@@ -35,6 +35,19 @@ async function expectAppError(fn, code) {
   expect(thrown.errorCode).to.equal(code);
 }
 
+// Field-level validation may be raised by either the framework validator or a
+// service-level guard; both must surface as an application error (HTTP 400).
+async function expectValidation(fn) {
+  let thrown;
+  try {
+    await fn();
+  } catch (error) {
+    thrown = error;
+  }
+  expect(thrown, 'expected a validation error to be thrown').to.exist;
+  expect(thrown.isApplicationError, 'expected an application error').to.equal(true);
+}
+
 describe('slugify', () => {
   it('lowercases and hyphenates whitespace', () => {
     expect(slugify('George Cooks')).to.equal('george-cooks');
@@ -230,5 +243,141 @@ describe('deleteCreatorCard', () => {
     expect(result.id).to.be.a('string');
     expect(result).to.have.property('access_code'); // creation format includes it
     expect(result.deleted).to.be.a('number').and.to.be.greaterThan(0);
+  });
+
+  it('rejects a creator_reference that is not exactly 20 characters', async () => {
+    await expectValidation(() =>
+      deleteCreatorCard({ slug: 'george-cooks', creator_reference: 'too-short' })
+    );
+  });
+});
+
+describe('createCreatorCard (additional coverage)', () => {
+  it('persists links and service_rates and echoes them back', async () => {
+    configure({ method: 'findOne', mockNull: true });
+    const result = await createCreatorCard({
+      title: 'George Cooks',
+      slug: 'george-cooks',
+      creator_reference: REF,
+      status: 'published',
+      links: [{ title: 'YouTube', url: 'https://youtube.com/@georgecooks' }],
+      service_rates: {
+        currency: 'NGN',
+        rates: [{ name: 'IG Story Post', description: 'One mention', amount: 5000000 }],
+      },
+    });
+    expect(result.links).to.deep.equal([
+      { title: 'YouTube', url: 'https://youtube.com/@georgecooks' },
+    ]);
+    expect(result.service_rates.currency).to.equal('NGN');
+    expect(result.service_rates.rates[0].amount).to.equal(5000000);
+  });
+
+  it('returns the access_code for a private card', async () => {
+    configure({ method: 'findOne', mockNull: true });
+    const result = await createCreatorCard({
+      title: 'VIP Rate Card',
+      slug: 'vip-rate-card',
+      creator_reference: REF,
+      status: 'published',
+      access_type: 'private',
+      access_code: 'A1B2C3',
+    });
+    expect(result.access_type).to.equal('private');
+    expect(result.access_code).to.equal('A1B2C3');
+  });
+
+  it('appends a random suffix when the title slug would be too short', async () => {
+    configure({ method: 'findOne', mockNull: true });
+    const result = await createCreatorCard({
+      title: 'Hi!',
+      creator_reference: REF,
+      status: 'published',
+    });
+    expect(result.slug).to.match(/^hi-[a-z0-9]{6}$/);
+  });
+
+  it('rejects an invalid slug format', async () => {
+    await expectValidation(() =>
+      createCreatorCard({
+        title: 'Bad Slug',
+        slug: 'bad slug',
+        creator_reference: REF,
+        status: 'published',
+      })
+    );
+  });
+
+  it('rejects a link url that is not http(s)', async () => {
+    await expectValidation(() =>
+      createCreatorCard({
+        title: 'Bad Link',
+        creator_reference: REF,
+        status: 'published',
+        links: [{ title: 'x', url: 'ftp://example.com' }],
+      })
+    );
+  });
+
+  it('rejects an empty service_rates.rates array', async () => {
+    await expectValidation(() =>
+      createCreatorCard({
+        title: 'No Rates',
+        creator_reference: REF,
+        status: 'published',
+        service_rates: { currency: 'USD', rates: [] },
+      })
+    );
+  });
+
+  it('rejects an unsupported currency', async () => {
+    await expectValidation(() =>
+      createCreatorCard({
+        title: 'Bad Currency',
+        creator_reference: REF,
+        status: 'published',
+        service_rates: { currency: 'EUR', rates: [{ name: 'Service A', amount: 100 }] },
+      })
+    );
+  });
+
+  it('rejects an access_code that is not 6 alphanumeric characters', async () => {
+    await expectValidation(() =>
+      createCreatorCard({
+        title: 'Bad Code',
+        creator_reference: REF,
+        status: 'published',
+        access_type: 'private',
+        access_code: 'ABC!23',
+      })
+    );
+  });
+
+  it('rejects a title shorter than 3 characters', async () => {
+    await expectValidation(() =>
+      createCreatorCard({ title: 'Hi', creator_reference: REF, status: 'published' })
+    );
+  });
+
+  it('rejects a missing creator_reference', async () => {
+    await expectValidation(() => createCreatorCard({ title: 'No Reference', status: 'published' }));
+  });
+
+  it('rejects an invalid status enum value', async () => {
+    await expectValidation(() =>
+      createCreatorCard({ title: 'Bad Status', creator_reference: REF, status: 'archived' })
+    );
+  });
+});
+
+describe('getCreatorCard (additional coverage)', () => {
+  it('returns a private card when the correct code is supplied, without leaking it', async () => {
+    configure({
+      method: 'findOne',
+      docConfig: { status: 'published', access_type: 'private', access_code: 'A1B2C3' },
+    });
+    const result = await getCreatorCard({ slug: 'vip', access_code: 'A1B2C3' });
+    expect(result.slug).to.equal('vip');
+    expect(result).to.not.have.property('access_code');
   });
 });
